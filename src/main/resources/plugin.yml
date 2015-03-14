@@ -1,0 +1,10 @@
+name: "${ext.pluginName}"
+main: "${ext.mainClass}"
+version: "${ext.pluginVersion}"
+softdepend: [ProtocolLib]
+commands:
+  limitednametags:
+    description: "Reloads the LimitedNametags configuration."
+    permission: "limitednametags.cmd.reload"
+    aliases: [lt]
+    usage: "/limitednametags"

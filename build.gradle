@@ -1,0 +1,58 @@
+plugins {
+    id "com.github.johnrengelman.shadow" version "1.2.0"
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.1'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
+    maven { url = "http://ci.shadowvolt.com/plugin/repository/everything/" }
+    jcenter()
+}
+apply plugin: 'java'
+apply plugin: 'maven'
+
+group = 'com.supaham'
+version = '1.1-SNAPSHOT'
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+ext {
+    mainPackage = 'com.supaham.limitednametags'
+    mainClass = mainPackage + '.LimitedNametagsPlugin'
+    pluginName = 'LimitedNametags'
+    pluginVersion = version
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives jar
+    archives sourcesJar
+}
+
+dependencies {
+    compile 'org.spigotmc:spigot-api:1.8.3-R0.1-SNAPSHOT'
+    compile 'com.comphenix.protocol:ProtocolLib:3.6.3-SNAPSHOT'
+}
+
+processResources {
+    from(sourceSets.main.resources.srcDirs) {
+        expand(project.properties as Map<String, ?>)
+        include 'plugin.yml'
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'plugin.yml'
+    }
+}
+
+build.dependsOn sourcesJar
