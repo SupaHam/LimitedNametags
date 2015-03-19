@@ -28,6 +28,7 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -36,6 +37,19 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 public class NametagManager {
+
+  public static final PacketContainer
+      CREATE_TEAM_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM),
+      ADD_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM),
+      REMOVE_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM);
+
+  static {
+    CREATE_TEAM_PACKET.getIntegers().write(1, 0); // mode
+    CREATE_TEAM_PACKET.getIntegers().write(2, 1); // friendly fire off
+    CREATE_TEAM_PACKET.getStrings().write(4, "never");
+    ADD_PACKET.getIntegers().write(1, 3); // mode 
+    REMOVE_PACKET.getIntegers().write(1, 4); // mode
+  }
 
   public static final String PERMISSION_PREFIX = "limitednametags.radius.";
   private final Plugin plugin;
@@ -67,12 +81,13 @@ public class NametagManager {
   public NametagManager(Plugin plugin, World world, WorldConfig worldConfig) {
     checkNotNull(plugin, "plugin cannot be null.");
     checkNotNull(worldConfig, "world config cannot be null.");
+    this.plugin = plugin;
     this.worldName = world == null ? "*" : world.getName();
+
     checkNotNull(worldConfig.getTeamName(),
                  "team name for world '" + this.worldName + "' cannot be null.");
     checkArgument(!worldConfig.getTeamName().isEmpty(),
                   "team name for world '" + this.worldName + "' cannot be empty.");
-    this.plugin = plugin;
     this.world = world;
     this.teamName = worldConfig.getTeamName();
     this.radiusGroups = worldConfig.getRadiusGroups();
@@ -85,22 +100,17 @@ public class NametagManager {
     PacketContainer packet = new PacketContainer(Server.SCOREBOARD_TEAM);
     packet.getStrings().write(0, teamName);
 
-    this.createTeamPacket = packet.shallowClone();
-    this.createTeamPacket.getIntegers().write(1, 0); // mode
-    this.createTeamPacket.getIntegers().write(2, 1);
-    this.createTeamPacket.getStrings().write(4, "never");
-
-    this.addPacket = packet.shallowClone();
-    this.addPacket.getIntegers().write(1, 3); // mode 
-
-    this.removePacket = packet.shallowClone();
-    this.removePacket.getIntegers().write(1, 4); // mode
+    this.createTeamPacket = CREATE_TEAM_PACKET.shallowClone();
+    this.createTeamPacket.getStrings().write(0, teamName);
+    this.addPacket = ADD_PACKET.shallowClone();
+    this.addPacket.getStrings().write(0, teamName);
+    this.removePacket = REMOVE_PACKET.shallowClone();
+    this.removePacket.getStrings().write(0, teamName);
   }
 
   public void destroy() {
     HandlerList.unregisterAll(this.listener);
     this.validatorTask.cancel();
-    this.validatorTask = null;
   }
 
   public void createTeamFor(Player player) {
@@ -121,17 +131,22 @@ public class NametagManager {
       return;
     }
     playersToHide.remove(forPlayer);
+    PacketContainer packet = this.addPacket.shallowClone();
+    List<String> toAdd = new ArrayList<>();
+    packet.getSpecificModifier(Collection.class).write(0, toAdd);
     for (Player player : playersToHide) {
       if (this.nametags.containsEntry(forPlayer, player)) {
         continue;
       }
-      PacketContainer packet = this.addPacket.shallowClone();
-      packet.getSpecificModifier(Collection.class).write(0, Arrays.asList(player.getName()));
-      sendPacket(forPlayer, packet);
+      if (toAdd.size() >= 450) { // pretty big IF
+        break;
+      }
+      toAdd.add(player.getName());
       if (notifyOthers) {
         hideNametag(player, forPlayer, false);
       }
     }
+    sendPacket(forPlayer, packet);
     Multimaps.synchronizedMultimap(this.nametags).putAll(forPlayer, playersToHide);
   }
 
@@ -147,17 +162,22 @@ public class NametagManager {
       return;
     }
     playersToShow.remove(forPlayer);
+    PacketContainer packet = this.removePacket.shallowClone();
+    List<String> toRemove = new ArrayList<>();
+    packet.getSpecificModifier(Collection.class).write(0, toRemove);
     for (Player player : playersToShow) {
       if (!this.nametags.containsEntry(forPlayer, player)) {
         continue;
       }
-      PacketContainer packet = this.removePacket.shallowClone();
-      packet.getSpecificModifier(Collection.class).write(0, Arrays.asList(player.getName()));
-      sendPacket(forPlayer, packet);
+      if (toRemove.size() >= 450) { // pretty big IF
+        break;
+      }
+      toRemove.add(player.getName());
       if (notifyOthers) {
         showNametag(player, forPlayer, false);
       }
     }
+    sendPacket(forPlayer, packet);
     Multimap<Player, Player> map = Multimaps.synchronizedMultimap(this.nametags);
     for (Player player : playersToShow) {
       map.remove(forPlayer, player);
