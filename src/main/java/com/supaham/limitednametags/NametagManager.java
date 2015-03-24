@@ -42,6 +42,23 @@ public class NametagManager {
       CREATE_TEAM_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM),
       ADD_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM),
       REMOVE_PACKET = new PacketContainer(Server.SCOREBOARD_TEAM);
+  public static final String PERMISSION_PREFIX = "limitednametags.radius.";
+  
+  private final Plugin plugin;
+  private final World world;
+  private final String worldName; // world name, if world is null, this is *
+  private final String teamName;
+  private final Map<String, Double> radiusGroups;
+  // A list of uuids in the nametags team for each player.
+  private final SetMultimap<Player, Player> nametags = HashMultimap.create();
+  // packets to send
+  private final PacketContainer createTeamPacket;
+  private final PacketContainer addPacket;
+  private final PacketContainer removePacket;
+  private final NametagsListener listener;
+  private final Map<Player, Double> radiusCache = new HashMap<>();
+  // This task is used to validate players nametags every so often.
+  private VisibilityValidatorTask validatorTask;
 
   static {
     CREATE_TEAM_PACKET.getIntegers().write(1, 0); // mode
@@ -50,25 +67,6 @@ public class NametagManager {
     ADD_PACKET.getIntegers().write(1, 3); // mode 
     REMOVE_PACKET.getIntegers().write(1, 4); // mode
   }
-
-  public static final String PERMISSION_PREFIX = "limitednametags.radius.";
-  private final Plugin plugin;
-  private final World world;
-  private final String worldName; // world name
-  private final String teamName;
-  private final Map<String, Double> radiusGroups;
-  // A list of uuids in the nametags team for each player.
-  private final SetMultimap<Player, Player> nametags = HashMultimap.create();
-
-  // This task is used to validate players nametags every so often.
-  private VisibilityValidatorTask validatorTask;
-
-  private final PacketContainer createTeamPacket;
-  private final PacketContainer addPacket;
-  private final PacketContainer removePacket;
-  private final NametagsListener listener;
-
-  private final Map<Player, Double> radiusCache = new HashMap<>();
 
   public static void sendPacket(Player player, PacketContainer packet) {
     try {
