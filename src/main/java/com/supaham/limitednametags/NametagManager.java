@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.SetMultimap;
@@ -31,10 +32,13 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 public class NametagManager {
 
@@ -57,6 +61,8 @@ public class NametagManager {
   private final PacketContainer removePacket;
   private final NametagsListener listener;
   private final Map<Player, Double> radiusCache = new HashMap<>();
+  
+  private Set<NametagListener> listeners = new HashSet<>();
   // This task is used to validate players nametags every so often.
   private VisibilityValidatorTask validatorTask;
 
@@ -159,7 +165,10 @@ public class NametagManager {
     if (playersToShow.isEmpty()) {
       return;
     }
-    playersToShow.remove(forPlayer);
+    // Remove that bugger. hah get it? BUG-ger.
+    if (playersToShow.contains(forPlayer)) {
+      playersToShow.remove(forPlayer);
+    }
     PacketContainer packet = this.removePacket.shallowClone();
     List<String> toRemove = new ArrayList<>();
     packet.getSpecificModifier(Collection.class).write(0, toRemove);
@@ -175,7 +184,9 @@ public class NametagManager {
         showNametag(player, forPlayer, false);
       }
     }
-    sendPacket(forPlayer, packet);
+    if (!toRemove.isEmpty()) {
+      sendPacket(forPlayer, packet);
+    }
     Multimap<Player, Player> map = Multimaps.synchronizedMultimap(this.nametags);
     for (Player player : playersToShow) {
       map.remove(forPlayer, player);
@@ -183,7 +194,10 @@ public class NametagManager {
   }
 
   public void clear(Player player, boolean sendPacketsToPlayer) {
-    Collection<Player> players = Multimaps.synchronizedMultimap(this.nametags).removeAll(player);
+    // Remove them from validator task
+    Collections.synchronizedMap(validatorTask.lastUpdate).remove(player);
+    // Clone array list as it is modified in showNametag
+    Collection<Player> players = new ArrayList<>(Multimaps.synchronizedMultimap(this.nametags).get(player));
     for (Player player1 : players) {
       showNametag(player1, player, sendPacketsToPlayer);
     }
@@ -226,6 +240,15 @@ public class NametagManager {
     return nametags;
   }
 
+  public Set<NametagListener> getListeners() {
+    return listeners;
+  }
+
+  public void setListeners(Set<NametagListener> listeners) {
+    Preconditions.checkNotNull(listeners, "listeners cannot be null.");
+    this.listeners = listeners;
+  }
+  
   /**
    * All suppliers must be sync to prevent CMEs from nms.world.entityList. TODO create our own
    * player list later
@@ -269,7 +292,6 @@ public class NametagManager {
         return;
       }
       mgr.radiusCache.remove(event.getPlayer());
-      mgr.validatorTask.lastUpdate.remove(player);
       new BukkitRunnable() {
         @Override
         public void run() {
@@ -281,14 +303,33 @@ public class NametagManager {
     @EventHandler
     public void onWorldChange(final PlayerChangedWorldEvent event) {
       final Player player = event.getPlayer();
-      if (!sameWorld(event.getFrom()) && !sameWorld(player.getWorld())) {
+      
+      // Player used to be in our world, clear them out.
+      if (sameWorld(event.getFrom())) {
+        // Clear any nametags the player might have had in this world
+        new BukkitRunnable() {
+          @Override
+          public void run() {
+            mgr.clear(player, true);
+          }
+        }.runTaskAsynchronously(mgr.getPlugin());
+      }
+      // This case is nececssary for NametagManagers that include wildcards.
+      // This will return false if this NametagManager does not manage one or more worlds.
+      if (!sameWorld(player.getWorld())) {
         return;
       }
+      
+      if (!sameWorld(player.getWorld())) {
+        return;
+      }
+      
       final List<Player> list = PlayerRadiusSupplier
           .get(player, mgr.getRadiusFor(player), false).get();
       new BukkitRunnable() {
         @Override
         public void run() {
+          // Precaution clear? :3
           mgr.clear(player, true);
 
           // Create team for players that join unregistered nametag worlds.
@@ -310,15 +351,23 @@ public class NametagManager {
       if (!sameBlock(event.getFrom(), event.getTo())) {
         final Player player = event.getPlayer();
         mgr.validatorTask.lastUpdate.put(player, System.currentTimeMillis());
+        // Everyone within the moving player
         final List<Player> list = PlayerRadiusSupplier
             .get(player, mgr.getRadiusFor(event.getPlayer()), true).get();
-        final List<Player> worldPlayers = player.getWorld().getPlayers();
+//        list.remove(player);
+        final List<Player> worldPlayers = new ArrayList<>(player.getWorld().getPlayers());
         new BukkitRunnable() {
           @Override
           public void run() {
+            // Show nametags of those in range to moving player.
             for (Player otherPlayer : list) {
-              mgr.showNametag(player, otherPlayer, true);
+              // Don't notify others, we need to do that ourselves using the modified worldPlayers to ensure radius
+              // specifications are followed
+              boolean notify = false;
+              mgr.showNametag(player, otherPlayer, notify);
             }
+
+            // Hide all other nametags from moving player.
             worldPlayers.removeAll(list);
             mgr.hideNametags(player, worldPlayers, true);
           }

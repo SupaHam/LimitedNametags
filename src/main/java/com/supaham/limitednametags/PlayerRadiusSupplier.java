@@ -6,22 +6,36 @@ import com.google.common.base.Supplier;
 import org.bukkit.entity.Player;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
 public class PlayerRadiusSupplier implements Supplier<List<Player>> {
 
   private final WeakReference<Player> player;
+  private final Collection<Player> listToGetFrom;
   private final double radius;
   private final boolean within;
 
   public static PlayerRadiusSupplier get(Player player, double radius, boolean within) {
-    Preconditions.checkNotNull(player, "player cannot be null.");
-    return new PlayerRadiusSupplier(player, radius, within);
+    return get(player, null, radius, within);
   }
 
-  public PlayerRadiusSupplier(Player player, double radius, boolean within) {
+  public static PlayerRadiusSupplier get(Player player, Collection<Player> getFrom, double radius,
+                                         boolean within) {
+    Preconditions.checkNotNull(player, "player cannot be null.");
+    return new PlayerRadiusSupplier(player, getFrom, radius, within);
+  }
+
+  private PlayerRadiusSupplier(Player player, double radius, boolean within) {
+    this(player, null, radius, within);
+  }
+
+  private PlayerRadiusSupplier(Player player, Collection<Player> getFrom, double radius,
+                              boolean within) {
     this.player = new WeakReference<>(player);
+    this.listToGetFrom = getFrom;
     this.radius = radius;
     this.within = within;
   }
@@ -32,7 +46,14 @@ public class PlayerRadiusSupplier implements Supplier<List<Player>> {
     if (player == null) {
       return Collections.emptyList();
     }
-    List<Player> list = player.getWorld().getPlayers();
+    List<Player> list;
+    if (this.listToGetFrom != null) {
+      // We mustn't modify the original in case another call
+      list = new ArrayList<>(this.listToGetFrom);
+    } else {
+      list = player.getWorld().getPlayers();
+    }
+
     // if radius is larger than 0 start removing, otherwise return all players in the our player's 
     // world.
     if (radius > 0) {

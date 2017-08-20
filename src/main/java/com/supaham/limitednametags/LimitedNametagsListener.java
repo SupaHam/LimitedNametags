@@ -1,9 +1,12 @@
 package com.supaham.limitednametags;
 
+import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
+
+import java.util.Map.Entry;
 
 final class LimitedNametagsListener implements Listener {
 
@@ -16,7 +19,11 @@ final class LimitedNametagsListener implements Listener {
   @EventHandler
   public void onWorldLoad(WorldLoadEvent event) {
     if (!this.plugin.isEnabledFor(event.getWorld())) {
-      this.plugin.register(event.getWorld());
+
+      // Check world config directly for late world loading.
+      if (plugin._getConfig().getWorldConfig(event.getWorld()) != null) {
+        this.plugin.register(event.getWorld());
+      }
     }
   }
   

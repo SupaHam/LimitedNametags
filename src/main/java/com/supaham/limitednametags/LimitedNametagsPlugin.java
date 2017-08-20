@@ -11,6 +11,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -78,11 +79,12 @@ public class LimitedNametagsPlugin extends JavaPlugin {
     this.config.load();
     for (String worldName : this.config.getWorldConfigs().keySet()) {
       World world = getServer().getWorld(worldName);
-      if (!worldName.equals("*") && world == null) {
-        getLogger().severe("World '" + worldName + "' doesn't exist.");
-        continue;
+      // Only register * and valid worlds during reloads.
+      // A world can be invalid due to it not being loaded at the time.
+      // We support late world loading in the LimitedNametagsListener class.
+      if (worldName.equals("*") || world != null) {
+        register(world);
       }
-      register(world);
     }
 
     for (Player player : getServer().getOnlinePlayers()) {
@@ -125,5 +127,9 @@ public class LimitedNametagsPlugin extends JavaPlugin {
 
   public NametagManager getNametagManager(World world) {
     return this.nametagManagers.get(world);
+  }
+  
+  public Map<World, NametagManager> getNametagManagers() {
+    return Collections.unmodifiableMap(this.nametagManagers);
   }
 }
